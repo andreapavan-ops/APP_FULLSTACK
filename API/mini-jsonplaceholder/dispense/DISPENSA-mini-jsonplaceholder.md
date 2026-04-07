@@ -896,3 +896,183 @@ Nella prossima parte del progetto, sostituiremo gli array con un database vero. 
 ---
 
 *Fine Parte 1 — Continua con: database vero, autenticazione, deploy*
+
+---
+
+## 17. CORS — il problema risolto
+
+**CORS è ora implementato nel progetto.**
+
+Quando il frontend (aperto come file locale `file://`) prova a chiamare il backend su `http://localhost:3000`, il browser blocca la richiesta:
+
+```
+Access to fetch at 'http://localhost:3000' from origin 'null' has been blocked by CORS policy
+```
+
+### La soluzione applicata
+
+```bash
+npm install cors
+```
+
+In `server.js`:
+
+```javascript
+import cors from "cors";
+
+// Prima di tutte le route:
+app.use(cors()); // permetti richieste da qualsiasi origine
+```
+
+**Perché funziona:** `cors()` aggiunge headers HTTP alla risposta che dicono al browser "questa origine è autorizzata". Il browser vede quegli headers e non blocca più la richiesta.
+
+---
+
+## 18. Le tre tecniche asincrone — Callback, Promise, Async/Await
+
+Abbiamo costruito un frontend (`WEB/mini-frontend/`) che dimostra **4 modi diversi** di fare la stessa cosa: caricare Utente → Post → Commenti in sequenza.
+
+### Perché "asincrono"?
+
+Quando il browser fa una richiesta HTTP (`fetch()`), **non aspetta** la risposta prima di continuare. Il codice va avanti, e la risposta arriva "quando è pronta".
+
+```
+Codice SINCRONO (come siamo abituati):
+  1. Chiedi i dati
+  2. Aspetta...
+  3. Hai i dati → vai avanti
+
+Codice ASINCRONO (come funziona JavaScript nel browser):
+  1. Chiedi i dati (e vai avanti senza aspettare)
+  2. Fai altro
+  3. Quando i dati arrivano → esegui questa funzione
+```
+
+---
+
+### VERSIONE 1 — Callback (il modo vecchio)
+
+Passi una **funzione** come argomento, e quella funzione viene chiamata quando i dati arrivano.
+
+```javascript
+fetchConCallback(url, function(errore, dati) {
+    fetchConCallback(url2, function(errore, dati2) {
+        fetchConCallback(url3, function(errore, dati3) {
+            // Callback Hell — sempre più annidato
+        });
+    });
+});
+```
+
+Questo si chiama **Callback Hell** — più operazioni sequenziali → più livelli di indentazione → codice illeggibile.
+
+---
+
+### VERSIONE 2 — Promise con .then()
+
+Le **Promise** sono oggetti che rappresentano un valore futuro. Con `.then()` si "aggancia" il codice successivo in una catena orizzontale.
+
+```javascript
+fetch(url)
+    .then(r => r.json())
+    .then(dati => fetch(url2 + dati.id))
+    .then(r => r.json())
+    .then(dati2 => { /* usa i dati */ })
+    .catch(errore => { /* gestisce gli errori */ });
+```
+
+**Vantaggio:** non si annida. **Svantaggio:** ancora verboso con molti passaggi.
+
+---
+
+### VERSIONE 3 — Async/Await (il modo moderno)
+
+`async/await` è **zucchero sintattico** sopra le Promise — stessa tecnologia, scrittura più leggibile.
+
+```javascript
+async function caricaDati() {
+    try {
+        const rispUtente = await fetch(url);
+        const utente = await rispUtente.json();
+        // "aspetta" la Promise prima di andare avanti
+
+        const rispPost = await fetch(url2 + utente.id);
+        const post = await rispPost.json();
+        // il codice sembra sequenziale, ma è ancora asincrono
+    } catch (errore) {
+        // gestisce gli errori come un try/catch normale
+    }
+}
+```
+
+**`async`** = questa funzione restituisce una Promise.
+**`await`** = aspetta che questa Promise si risolva.
+
+**Questo è il modo moderno. Si usa quasi sempre async/await.**
+
+---
+
+### VERSIONE 4 — Promise.all (parallelo)
+
+Se hai più richieste **indipendenti**, puoi lanciarle **tutte insieme**.
+
+```javascript
+// SEQUENZIALE (lento)
+const utenti = await fetch("/api/utenti").then(r => r.json());
+const post   = await fetch("/api/post").then(r => r.json());
+// totale: tempo_utenti + tempo_post
+
+// PARALLELO con Promise.all (veloce)
+const [rispUtenti, rispPost] = await Promise.all([
+    fetch("/api/utenti"),
+    fetch("/api/post")
+]);
+const [utenti, post] = await Promise.all([
+    rispUtenti.json(),
+    rispPost.json()
+]);
+// totale: max(tempo_utenti, tempo_post)
+```
+
+**Quando usarlo:** quando le richieste sono indipendenti. Utenti e post non dipendono l'uno dall'altro → parallelo. I commenti dipendono dai post → sequenziale.
+
+---
+
+### Riepilogo delle 4 versioni
+
+| Tecnica | Anno | Leggibilità | Uso oggi |
+|---|---|---|---|
+| **Callback** | Prima del 2015 | Scarsa (Callback Hell) | Quasi mai |
+| **Promise .then()** | 2015 (ES6) | Media | A volte |
+| **Async/Await** | 2017 (ES8) | Ottima | Sempre |
+| **Promise.all** | 2015 (ES6) | Ottima | Quando serve parallelismo |
+
+---
+
+## 19. Il frontend didattico — struttura
+
+Il frontend si trova in `WEB/mini-frontend/`:
+
+```
+mini-frontend/
+├── index.html    ← la pagina con i 4 bottoni
+└── script.js     ← le 4 versioni asincrone
+```
+
+### Come aprirlo
+
+1. Avvia il server: `node server.js` nella cartella `API/mini-jsonplaceholder/`
+2. Apri `index.html` direttamente nel browser
+
+CORS è già configurato nel server — nessun errore di rete.
+
+### Cosa fa ogni bottone
+
+| Bottone | Tecnica | Utente caricato |
+|---|---|---|
+| 1. Callback | XMLHttpRequest + callback | Utente id=1 (Mario Rossi) |
+| 2. Promise .then() | fetch() + .then() | Utente id=2 (Luigi Verdi) |
+| 3. Async/Await | fetch() + async/await | Utente id=3 (Peach Bianchi) |
+| 4. Bonus Parallelo | Promise.all | Tutti gli utenti + tutti i post |
+
+Ogni bottone mostra il tempo impiegato — così puoi confrontare la velocità tra versione sequenziale e parallela.
